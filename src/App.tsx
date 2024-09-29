@@ -15,6 +15,7 @@ const App: React.FC = () => {
     const [sensorData, setSensorData] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+    const [latestSensorData, setLatestSensorData] = useState<any | null>(null);
     
     useEffect(() => {
         AWS.config.update({
@@ -40,6 +41,14 @@ const App: React.FC = () => {
                 console.log('Sensor Data:', sensorResult.Items);
                 setBeesData(beesResult.Items || []);
                 setSensorData(sensorResult.Items || []);
+
+                // 最新のセンサーデータを設定
+                if (sensorResult.Items && sensorResult.Items.length > 0) {
+                    const sortedSensorData = sensorResult.Items.sort((a, b) => 
+                        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                    );
+                    setLatestSensorData(sortedSensorData[0]);
+                }
             } catch (err) {
                 setError('データ取得エラー: ' + (err as Error).message);
             } finally {
@@ -111,6 +120,25 @@ const App: React.FC = () => {
             {loading && <CircularProgress />}
             {error && <Alert severity="error">{error}</Alert>}
             
+            {latestSensorData && (
+                <Card style={{ marginBottom: '20px' }}>
+                    <CardContent>
+                        <Typography variant="h5" gutterBottom>
+                            最新の環境データ
+                        </Typography>
+                        <Typography>
+                            日時: {new Date(latestSensorData.timestamp).toLocaleString()}
+                        </Typography>
+                        <Typography>
+                            温度: {parseFloat(latestSensorData.payload.temperature).toFixed(1)}°C
+                        </Typography>
+                        <Typography>
+                            湿度: {parseFloat(latestSensorData.payload.humidity).toFixed(1)}%
+                        </Typography>
+                    </CardContent>
+                </Card>
+            )}
+
             {groupBeeDataByDate(beesData).map(([date, bees]) => (
                 <Accordion key={date}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
