@@ -44,7 +44,6 @@ export const fetchEnvironmentData = async (limit: number = 24): Promise<Environm
 
   try {
     const data = await dynamoDB.query(params).promise();
-    console.log('DynamoDB Query Result:', data);
     if (data.Items && data.Items.length > 0) {
       return data.Items.map(item => {
         return {

@@ -7,7 +7,7 @@ import beeOutImage from './images/bee_out.png';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import { ChartData } from 'chart.js';
-import { analyzeDataWithLLM } from './services/apiService';
+import { analyzeDataWithLLM, BeesCountData, TemperatureHumidityData } from './services/apiService';
 import ReactMarkdown from 'react-markdown';
 import './styles/markdown.css';
 
@@ -39,28 +39,44 @@ const App: React.FC = () => {
             };
 
             try {
+                setLoading(true);
                 const beesResult = await dynamoDB.scan(beesParams).promise();
                 const sensorResult = await dynamoDB.scan(sensorParams).promise();
-                console.log('Bees Data:', beesResult.Items);
-                console.log('Sensor Data:', sensorResult.Items);
-                setBeesData(beesResult.Items || []);
-                setSensorData(sensorResult.Items || []);
-
-                // AIアドバイスを取得
-                try {
-                    const adviceText = await analyzeDataWithLLM(beesData, sensorData);
-                    setAdvice(adviceText);
-                } catch (adviceError) {
-                    console.error('アドバイス取得エラー:', adviceError);
-                    setAdvice('申し訳ありません。現在アドバイスを生成できません。');
-                }
+                
+                const beesItems: BeesCountData[] = (beesResult.Items || []).map(item => ({
+                    timestamp: item.timestamp,
+                    bee_type: item.bee_type
+                }));
+                
+                const sensorItems: TemperatureHumidityData[] = (sensorResult.Items || []).map(item => ({
+                    sensor_id: item.sensor_id,
+                    temperature: item.payload.temperature,
+                    humidity: item.payload.humidity,
+                    timestamp: item.timestamp
+                }));
+                
+                setBeesData(beesItems);
+                setSensorData(sensorItems);
 
                 // 最新のセンサーデータを設定
-                if (sensorResult.Items && sensorResult.Items.length > 0) {
-                    const sortedSensorData = sensorResult.Items.sort((a, b) => 
+                if (sensorItems.length > 0) {
+                    const sortedSensorData = sensorItems.sort((a, b) => 
                         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
                     );
                     setLatestSensorData(sortedSensorData[0]);
+                }
+
+                // AIアドバイスを取得（データ取得後に実行）
+                if (beesItems.length > 0 && sensorItems.length > 0) {
+                    try {
+                        const adviceText = await analyzeDataWithLLM(beesItems, sensorItems);
+                        setAdvice(adviceText);
+                    } catch (adviceError) {
+                        console.error('アドバイス取得エラー:', adviceError);
+                        setAdvice('申し訳ありません。現在アドバイスを生成できません。');
+                    }
+                } else {
+                    setAdvice('データが不足しているため、アドバイスを生成できません。');
                 }
             } catch (err) {
                 setError('データ取得エラー: ' + (err as Error).message);
@@ -90,22 +106,19 @@ const App: React.FC = () => {
 
     const prepareChartData = () => {
         if (sensorData.length === 0) return null;
-        
-        console.log('Preparing chart data with:', sensorData);
-        
         const sortedData = sensorData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         return {
             labels: sortedData.map(item => new Date(item.timestamp).toLocaleString()),
             datasets: [
                 {
                     label: '温度 (°C)',
-                    data: sortedData.map(item => parseFloat(item.payload.temperature)),
+                    data: sortedData.map(item => parseFloat(item.temperature)),
                     borderColor: 'rgb(255, 99, 132)',
                     backgroundColor: 'rgba(255, 99, 132, 0.5)',
                 },
                 {
                     label: '湿度 (%)',
-                    data: sortedData.map(item => parseFloat(item.payload.humidity)),
+                    data: sortedData.map(item => parseFloat(item.humidity)),
                     borderColor: 'rgb(53, 162, 235)',
                     backgroundColor: 'rgba(53, 162, 235, 0.5)',
                 },
@@ -144,10 +157,10 @@ const App: React.FC = () => {
                             日時: {new Date(latestSensorData.timestamp).toLocaleString()}
                         </Typography>
                         <Typography>
-                            温度: {parseFloat(latestSensorData.payload.temperature).toFixed(1)}°C
+                            温度: {latestSensorData.temperature ? parseFloat(latestSensorData.temperature).toFixed(1) : 'N/A'}°C
                         </Typography>
                         <Typography>
-                            湿度: {parseFloat(latestSensorData.payload.humidity).toFixed(1)}%
+                            湿度: {latestSensorData.humidity ? parseFloat(latestSensorData.humidity).toFixed(1) : 'N/A'}%
                         </Typography>
                     </CardContent>
                 </Card>
