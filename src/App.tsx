@@ -7,6 +7,9 @@ import beeOutImage from './images/bee_out.png';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import { ChartData } from 'chart.js';
+import { analyzeDataWithLLM } from './services/apiService';
+import ReactMarkdown from 'react-markdown';
+import './styles/markdown.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -16,6 +19,7 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [latestSensorData, setLatestSensorData] = useState<any | null>(null);
+    const [advice, setAdvice] = useState<string | null>(null);
     
     useEffect(() => {
         AWS.config.update({
@@ -42,6 +46,15 @@ const App: React.FC = () => {
                 setBeesData(beesResult.Items || []);
                 setSensorData(sensorResult.Items || []);
 
+                // AIアドバイスを取得
+                try {
+                    const adviceText = await analyzeDataWithLLM(beesData, sensorData);
+                    setAdvice(adviceText);
+                } catch (adviceError) {
+                    console.error('アドバイス取得エラー:', adviceError);
+                    setAdvice('申し訳ありません。現在アドバイスを生成できません。');
+                }
+
                 // 最新のセンサーデータを設定
                 if (sensorResult.Items && sensorResult.Items.length > 0) {
                     const sortedSensorData = sensorResult.Items.sort((a, b) => 
@@ -57,6 +70,7 @@ const App: React.FC = () => {
         };
 
         fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const groupBeeDataByDate = (data: any[]) => {
@@ -135,6 +149,17 @@ const App: React.FC = () => {
                         <Typography>
                             湿度: {parseFloat(latestSensorData.payload.humidity).toFixed(1)}%
                         </Typography>
+                    </CardContent>
+                </Card>
+            )}
+
+            {advice && (
+                <Card style={{ marginTop: '20px' }}>
+                    <CardContent>
+                        <Typography variant="h5" gutterBottom>
+                            AIアドバイス
+                        </Typography>
+                        <ReactMarkdown className="markdown-content">{advice}</ReactMarkdown>
                     </CardContent>
                 </Card>
             )}
